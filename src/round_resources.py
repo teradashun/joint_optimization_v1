@@ -159,7 +159,7 @@ def plan_round(
 
         # 1. 単独でも参加できない端末を除外
         for i in np.flatnonzero(active):
-            if not within_badget([required_bandwidth[i]]):
+            if not within_budget([required_bandwidth[i]]):
                 active[i] = False
         
         # 2. Σb_i <= B_totalを満たすまで、b_iが大きい端末を除外
