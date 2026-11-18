@@ -154,21 +154,62 @@ def plan_round(
             )
         )
 
-    if method == "B":
-        if not within_budget(required[:, 0]):
-            return None, None, False, eta
+    def exclude_clients(active, required_bandwidth):
+        active = active.copy()
+
+        # 1. 単独でも参加できない端末を除外
+        for i in np.flatnonzero(active):
+            if not within_badget([required_bandwidth[i]]):
+                active[i] = False
         
-        choices = np.full(n, exits, dtype=int)
+        # 2. Σb_i <= B_totalを満たすまで、b_iが大きい端末を除外
+        while not within_budget(required_bandwidth[active]):
+            indices = np.flatnonzero(active)
+            if len(indices) == 0:
+                break
+        
+            # 同じb_iの場合、配列内の位置が小さい端末を除外
+            target = max(indices, key=lambda i: (required_bandwidth[i], -int(i)))
+            active[target] = False
 
-        for i in range(n):
-            while not math.isfinite(required[i, choices[i] - 1]):
-                choices[i] -= 1
+        return active
     
-        while not within_budget(required[np.arange(n), choices - 1]):
-            candidates = np.flatnonzero(choices > 1)
-            target = min(candidates, key=lambda i: (choices[i] / required[i, choices[i] - 1], int(i)))
-            choices[target] -= 1
+    active = np.ones(n, dtype=bool)
+    choices = np.zeros(n, dtype=int)
 
+    if method == "B":
+        while active.any():
+            # クライアント除外後も、残った端末の最深Exitから最適化
+            choices[:] = 0
+            choices[active] = exits
+
+            # 通信時間を確保できるExitまで浅くする
+            for i in np.flatnonzero(active):
+                while(choices[i] > 1) and not math.isfinite(required[i, choices[i] - 1]):
+                    choices[i] -= 1
+            
+            while True:
+                indices = np.flatnonzero(active)
+                current = required[indices, choices[indices] - 1]
+
+                if within_budget(current):
+                    break
+                
+                # candidates: まだExitを下げられる候補端末
+                candidates = indices[choices[indices] > 1]
+                # 全員が最浅Exitでも帯域不足
+                if len(candidates) == 0:
+                    break
+                
+                target = min(candidates, key=lambda i: (choices[i] / required[i, choices[i] - 1], int(i)))
+                choices[target] -= 1
+            
+            if within_budget(required[indices, choices[indices] - 1]):
+                break
+            
+            # 最浅Exitの必要帯域を基準に端末を除外し、最適化
+            active = exclude_clients(active, required[:, 0])
+    
     else:
         fixed_choices = {
             "C": exits,
@@ -176,11 +217,17 @@ def plan_round(
             "E": 2,
             "F": 1,
         }
-        choices = np.full(n, fixed_choices[method], dtype=int)
+        fixed_exit = fixed_choices[method]
+        active = exclude_clients(active, required[:, fixed_exit - 1])
+        choices[active] = fixed_exit
+    
+    # 除外端末はExit番号0、割当帯域0
+    choices[~active] = 0
+    bandwidth = np.zeros(n, dtype=float)
+    indices = np.flatnonzero(active)
+    bandwidth[indices] = required[indices, choices[indices] - 1]
 
-    bandwidth = required[np.arange(n), choices - 1]
-    updated = within_budget(bandwidth)
-
+    updated = bool(active.any())
     return choices, bandwidth, updated, eta
 
 

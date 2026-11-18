@@ -181,6 +181,7 @@ def main(argv=None):
             "seed": seed,
             "round": 0,
             "accuracy": float(last_accuracies[initial_exit]),
+            "num_participants": 0,
             "updated": False,
             "skipped": False,
             "exit_index_sum": np.nan,
@@ -190,9 +191,14 @@ def main(argv=None):
         conditions = []
 
         for global_round in range(global_rounds):
-            plan = plans[global_round]
+            choices, bandwidth, updated, eta = plans[global_round]
+
+            # 実際に更新へ参加する端末だけを残す
+            active = choices > 0
+            participants = np.asarray(selected_clients[global_round], dtype=int)[active]
+            plan = (choices[active], bandwidth[active], updated, eta[active])
+
             choices, _, updated, _ = plan
-            participants = selected_clients[global_round]
             uplink_mses = {}
 
             if updated:
@@ -203,7 +209,7 @@ def main(argv=None):
                 # 参加端末でローカル学習し、共有層を送信する
                 for position, client_idx in enumerate(participants):
                     exit_id = exits[int(choices[position]) - 1]
-                    client_loaders[client_idx].generator.manual_seed(seed + global_round + client_idx)
+                    client_loaders[client_idx].generator.manual_seed(int(seed + global_round + client_idx))
 
                     local_model = copy.deepcopy(global_model)
                     optimizer = select_optimizer(optimizer_name, local_model, lr)

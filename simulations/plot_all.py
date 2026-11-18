@@ -4,12 +4,13 @@ import argparse
 from pathlib import Path
 
 if __package__:
-    from . import plot_accuracy, plot_exit_cdf, plot_skip_rate
+    from . import plot_accuracy, plot_exit_cdf, plot_skip_rate, plot_participants
     from .plot_common import experiment_directories
 else:
     import plot_accuracy
     import plot_exit_cdf
     import plot_skip_rate
+    import plot_participants
     from plot_common import experiment_directories
 
 
@@ -19,19 +20,14 @@ def main():
     args = parser.parse_args()
 
     for alpha, directory in experiment_directories(args.root):
-        print(
-            f"\n描画中: {directory.parent.name}, alpha={alpha}",
-            flush=True,
-        )
+        print(f"\n描画中: {directory.parent.name}, alpha={alpha}", flush=True)
 
-        options = [
-            "--root", str(directory),
-            "--alpha", alpha,
-        ]
+        options = ["--root", str(directory), "--alpha", alpha]
 
         plot_accuracy.main(options)
         plot_skip_rate.main(options)
         plot_exit_cdf.main(options)
+        plot_participants.main(options)
 
 
 if __name__ == "__main__":

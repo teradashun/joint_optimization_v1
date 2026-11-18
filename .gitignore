@@ -2,7 +2,6 @@
 /results
 /src/__pycache__
 /simulations/__pycache__
-/simulations/participants.py
 /saved_models
 /.venv
 /measure
