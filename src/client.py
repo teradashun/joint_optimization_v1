@@ -6,10 +6,7 @@ import numpy as np
 from .models import MODEL_SPECS
 
 
-def train(
-    optimizer, model, train_loader, device, model_name,
-    frozen_prefixes=(), exit_id=None,
-):
+def train(optimizer, model, train_loader, device, model_name, temperature, frozen_prefixes=(), exit_id=None):
     # 評価関数の定義
     criterion = nn.CrossEntropyLoss()
 
@@ -38,6 +35,18 @@ def train(
             arr = base_arr / np.sum(base_arr)
 
             loss = sum(weight * criterion(output, labels) for weight, output in zip(arr, outputs))
+
+            if len(outputs) > 1:
+                with torch.no_grad():
+                    teacher_logits = torch.stack(outputs).mean(dim=0)
+                    teacher_probs = F.softmax(teacher_logits / temperature, dim=1)
+
+                # 各Exitの予測を教師分布に近づける
+                kd_loss = sum(-(teacher_probs * F.log_softmax(output / temperature, dim=1)).sum(dim=1).mean()
+                    for output in outputs) / len(outputs)
+
+                loss = loss + temperature**2 * kd_loss
+
         
         else:
             outputs = model(images)

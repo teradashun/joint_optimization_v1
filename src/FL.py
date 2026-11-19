@@ -54,6 +54,7 @@ def main(argv=None):
     model_name      = training["model_name"]
     batch_speedup   = training["batch_speedup"]
     flops_per_cycle = training["flops_per_cycle"]
+    temperature     = training["temperature"]
 
     spec = MODEL_SPECS[model_name]
     exits = spec["exit_ids"]
@@ -163,8 +164,7 @@ def main(argv=None):
                     "seed": seed,
                     "exit_ids": list(exits)
                 },
-                file,
-                indent=2,
+                file, indent=2
             )
 
         save_split(output, subsets, test_loader.dataset, seed)
@@ -215,7 +215,7 @@ def main(argv=None):
                     optimizer = select_optimizer(optimizer_name, local_model, lr)
 
                     for _ in range(epochs):
-                        train(optimizer, local_model, client_loaders[client_idx], device, model_name, exit_id=exit_id)
+                        train(optimizer, local_model, client_loaders[client_idx], device, model_name, temperature, exit_id=exit_id)
                     
                     local_shared = shared_state(
                         local_model,
