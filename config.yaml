@@ -7,13 +7,14 @@ training:
   dataset_name: CIFAR10   # [MNIST, CIFAR10, CIFAR100]
   batch_speedup: 2
   flops_per_cycle: 5
+  temperature: 3
 
 FL:
   global_rounds: 50
-  num_clients: 20
+  num_clients: 100
   dirichlet: 0.5   # [0.1, 1e20]
   ite_num: 1
-  cohort: 5
+  cohort: 40
 
 communication:
   total_bandwidth: 5000000  # 5 MHz
