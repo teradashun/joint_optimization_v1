@@ -218,8 +218,23 @@ def plan_round(
             "F": 1,
         }
         fixed_exit = fixed_choices[method]
-        active = exclude_clients(active, required[:, fixed_exit - 1])
-        choices[active] = fixed_exit
+        required_fixed = required[:, fixed_exit - 1]
+        bandwidth = np.zeros(n, dtype=float)
+
+        while active.any():
+            indices = np.flatnonzero(active)
+            equal_bandwidth = total_bandwidth / len(indices)
+            worst = indices[np.argmax(required_fixed[indices])]
+
+            # 最も帯域を必要とする端末が間に合えば、残りも全員間に合う
+            if required_fixed[worst] <= equal_bandwidth:
+                choices[indices] = fixed_exit
+                bandwidth[indices] = equal_bandwidth
+                break
+            
+            active[worst] = False
+
+        return choices, bandwidth, bool(active.any()), eta
     
     # 除外端末はExit番号0、割当帯域0
     choices[~active] = 0
