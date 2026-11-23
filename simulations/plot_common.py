@@ -1,4 +1,5 @@
 import json
+import csv
 import math
 from pathlib import Path
 
@@ -13,13 +14,24 @@ METHODS = {
 }
 
 
+def read_settings(directory, method):
+    folder = Path(directory) / method
+    summary = folder / "skip_rate.csv"
+    if summary.is_file():
+        with summary.open(encoding="utf-8", newline="") as file:
+            row = next(csv.DictReader(file))
+        return {
+            "alpha": float(row["alpha"]),
+            "gamma": float(row["gamma"]),
+            "exit_ids": list(map(int, row["exit_ids"].split(","))),
+            "config": {"FL": {"cohort": int(row["cohort"])}},
+        }
+    with (folder / "metadata.json").open(encoding="utf-8") as file:
+        return json.load(file)
+
+
 def plot_settings(directory):
-    # Bが同時割当
-    path = Path(directory) / "B" / "metadata.json"
-
-    with path.open(encoding="utf-8") as file:
-        metadata = json.load(file)
-
+    metadata = read_settings(directory, "B")
     exit_ids = tuple(metadata["exit_ids"])
 
     if len(exit_ids) not in (3, 4):
@@ -58,9 +70,8 @@ def experiment_directories(root, alpha=None):
         recorded_alphas = {}
         for method in METHODS:
             path = directory / method / "metadata.json"
-            if path.is_file():
-                with path.open(encoding="utf-8") as file:
-                    value = float(json.load(file)["alpha"])
+            if path.is_file() or path.with_name("skip_rate.csv").is_file():
+                value = float(read_settings(directory, method)["alpha"])
                 if not math.isfinite(value) or value <= 0:
                     raise ValueError(f"alphaが不正です: {path}")
                 recorded_alphas[method] = value
@@ -95,8 +106,7 @@ def make_title(directory, alpha):
 
         path = directory / method / "metadata.json"
 
-        with path.open(encoding="utf-8") as file:
-            gamma = float(json.load(file)["gamma"])
+        gamma = float(read_settings(directory, method)["gamma"])
 
         if not math.isfinite(gamma) or gamma <= 0:
             raise ValueError(f"gammaが不正です: {path}")
@@ -120,8 +130,7 @@ def make_title(directory, alpha):
 def cohort_size(directory, method):
     path = directory / method / "metadata.json"
 
-    with path.open(encoding="utf-8") as file:
-        metadata = json.load(file)
+    metadata = read_settings(directory, method)
 
     count = int(metadata["config"]["FL"]["cohort"])
 

@@ -12,7 +12,6 @@
 
 import copy
 import os
-import json
 from pathlib import Path
 
 import numpy as np
@@ -26,8 +25,8 @@ from .models import MODEL_SPECS
 from .round_resources import count_exit_flops, make_environment, plan_round
 from .experiment import (
     evaluate_global, full_state, parse_args, output_directory, 
-    print_resource_summary, save_checkpoint, save_round_metrics,
-    save_split, record_round, shared_state
+    print_resource_summary, save_round_metrics,
+    record_round, shared_state
     )
 from .server import federated_learning
 from .utils import choose_clients, load_config, select_optimizer, set_seed
@@ -75,6 +74,13 @@ def main(argv=None):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     train_loader, _, test_loader = get_datasets(batch_size, "CIFAR10", val_ratio=0.0)
+
+    if ite_num < 1:
+        raise ValueError("ite_num must be positive")
+    histories = []
+    output = output_directory(args, cohort, num_clients)
+    if not args.dry_run:
+        output.mkdir(parents=True, exist_ok=False)
 
     for ite in range(ite_num):
         seed = ite + args.seed
@@ -126,7 +132,7 @@ def main(argv=None):
             * np.asarray([flops[e] for e in exits])[None, :]
             / (cpu_hz[:, None] * flops_per_cycle * batch_speedup)
         )
-        distances, channels, noises = make_environment(
+        _, channels, noises = make_environment(
             num_clients, global_rounds, bandwidth_total, seed,
             max_dis=max_dis, min_dis=min_dis, TXG=TXG, RXG=RXG, N_psd=N_psd, NF=NF,
         )
@@ -151,24 +157,6 @@ def main(argv=None):
         if args.dry_run:
             continue
 
-        output = output_directory(args, seed, ite_num, cohort, num_clients)
-        output.mkdir(parents=True, exist_ok=False)
-
-        with (output / "metadata.json").open("w", encoding="utf-8") as file:
-            json.dump(
-                {
-                    "gamma": args.gamma,
-                    "config": config,
-                    "method": args.method,
-                    "alpha": args.alpha,
-                    "seed": seed,
-                    "exit_ids": list(exits)
-                },
-                file,
-                indent=2,
-            )
-
-        save_split(output, subsets, test_loader.dataset, seed)
         last_accuracies = evaluate_global(global_model, test_loader, device, exits)
 
         initial_exit = {
@@ -179,7 +167,7 @@ def main(argv=None):
         }.get(args.method, exits[-1])
 
         history = [{
-            "seed": seed,
+            "num_participants": 0,
             "round": 0,
             "accuracy": float(last_accuracies[initial_exit]),
             "updated": False,
@@ -188,7 +176,6 @@ def main(argv=None):
             "noise_w": np.nan,
             "uplink_mse": np.nan,
         }]
-        conditions = []
 
         for global_round in range(global_rounds):
             plan = plans[global_round]
@@ -240,25 +227,9 @@ def main(argv=None):
                 last_accuracies = evaluate_global(global_model, test_loader, device, exits)
 
             record_round(
-            history,
-            conditions,
-            seed=seed,
-            global_round=global_round + 1,
-            num_clients=num_clients,
-            exits=exits,
-            comp=comp,
-            distances=distances,
-            cpu_hz=cpu_hz,
-            noises=noises,
-            channels=channels,
-            size_bits=size_bits,
-            plan=plan,
-            participants=participants,
-            accuracies=last_accuracies,
-            uplink_mses=uplink_mses,
-            method=args.method,
+                history, global_round + 1, choices, updated, last_accuracies,
+                exits, noises[global_round], uplink_mses,
             )
-            save_round_metrics(output, history, conditions)
             status = "更新" if updated else "スキップ"
             print(
                 f"Round {global_round + 1}/{global_rounds}: "
@@ -266,13 +237,10 @@ def main(argv=None):
             )
 
 
-        # この試行の最終モデルを保存する
-        save_checkpoint(
-            output, config, args, seed, model_name, exits, subsets,
-            test_loader.dataset, global_model, last_accuracies,
-        )
-        skipped_rounds = sum(row["skipped"] for row in history[1:])
-        print(f"更新スキップ率: {100.0 * skipped_rounds / global_rounds:.2f}%")
+        histories.append(history)
+
+    if not args.dry_run:
+        save_round_metrics(output, histories, args, exits, cohort)
         print(f"結果保存先: {output}")
 
 

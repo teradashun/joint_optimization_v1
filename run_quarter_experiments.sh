@@ -7,8 +7,6 @@ read -rp "gamma [秒]: " GAMMA
 
 SEED=100
 RUN_ROOT="results"
-LOG_ROOT="$RUN_ROOT/logs_$$"
-mkdir -p "$LOG_ROOT"
 
 for alpha in 0.5; do
     for method in A B C D E F; do
@@ -19,8 +17,7 @@ for alpha in 0.5; do
             --method "$method" \
             --gamma "$GAMMA" \
             --seed "$SEED" \
-            --output-root "$RUN_ROOT" \
-            2>&1 | tee "$LOG_ROOT/alpha_${alpha}_${method}.log"
+            --output-root "$RUN_ROOT"
     done
 done
 

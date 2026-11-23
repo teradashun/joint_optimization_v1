@@ -1,8 +1,6 @@
 """引数の読み込み・評価・記録。準備と学習の流れは FL.py の main() を参照。"""
 
 import argparse
-import copy
-import json
 import math
 from pathlib import Path
 
@@ -12,7 +10,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from .client import test_exit
-from .dataset import original_indices
 from .round_resources import gamma_boundary
 
 
@@ -96,27 +93,10 @@ def print_resource_summary(exits, comp, channels, noises, power, size_bits, band
     deep_max = gamma_df[f"gamma_exit{exits[-1]}_s"].max()
 
 
-def output_directory(args, seed, ite_num, cohort, num_clients):
-    """分割方式・alpha・参加台数・総台数ごとに保存先を分ける。"""
-    root = args.output_root
-    if ite_num > 1:
-        root = root / f"seed_{seed}"
-    alpha_tag = "0.5" if args.alpha == 0.5 else "1e10"
-    condition = f"{alpha_tag}_{cohort}|{num_clients}"
-    return root / condition / args.method
-
-
-def save_split(output, subsets, test_dataset, seed):
-    split_record = {
-        "train_sizes": np.asarray([len(s) for s in subsets]),
-        "train_split_seed": np.asarray(seed),
-        "test_split_mode": np.asarray("global"),
-        "test_indices": np.arange(len(test_dataset)),
-    }
-    for i, subset in enumerate(subsets):
-        split_record[f"train_indices_{i}"] = original_indices(subset)
-
-    np.savez_compressed(output / "split.npz", **split_record)
+def output_directory(args, cohort, num_clients):
+    alpha = "1e10" if args.alpha == 1e10 else f"{args.alpha:g}"
+    condition = f"{alpha}_{cohort}|{num_clients}_gamma={args.gamma:g}"
+    return args.output_root / condition / args.method
 
 
 def evaluate_global(global_model, test_loader, device, exits):
@@ -139,107 +119,50 @@ def make_train_loaders(subsets, batch_size, seed, global_round):
     ]
 
 
-def record_round(history, conditions, *, seed, global_round, num_clients,
-                 exits, comp, distances, cpu_hz, noises, channels, size_bits,
-                 plan, participants, accuracies, uplink_mses, method):
-    choices, bandwidth, updated, eta = plan
-    t = global_round
-    positions = {client: index for index, client in enumerate(participants)}
-
+def record_round(history, global_round, choices, updated, accuracies, exits, noise, uplink_mses):
     if updated:
         accuracy = float(np.mean([accuracies[exits[int(choice) - 1]] for choice in choices]))
     else:
-        accuracy = float(history[-1]["accuracy"])
+        accuracy = history[-1]["accuracy"]
     history.append({
-        "seed": seed,
-        "round": t,
+        "round": global_round,
         "accuracy": accuracy,
         "updated": bool(updated),
         "skipped": not bool(updated),
+        "num_participants": len(uplink_mses),
         "exit_index_sum": int(np.sum(choices)) if updated else np.nan,
-        "noise_w": float(noises[t - 1]),
-        "uplink_mse": float(np.mean(list(uplink_mses.values())))
-        if uplink_mses else np.nan,
+        "noise_w": float(noise),
+        "uplink_mse": np.mean(list(uplink_mses.values())) if uplink_mses else np.nan,
     })
 
-    for i in range(num_clients):
-        position = positions.get(i)
-        candidate = (int(choices[position]) if position is not None and choices is not None else None)
 
-        b = (float(bandwidth[position]) if position is not None and bandwidth is not None else np.nan)
+def save_round_metrics(output, histories, args, exits, cohort):
+    trials = [pd.DataFrame(history) for history in histories]
+    means = pd.concat(trials).groupby("round", as_index=False).mean()
+    means.to_csv(output / "round_metrics.csv", index=False)
 
-        # tc: 選択Exitでの計算時間
-        tc = (float(comp[i, candidate - 1]) if candidate is not None else np.nan)
+    thresholds = np.arange(len(exits) * cohort + 2)
+    cdfs = []
+    skip_rates = []
+    for trial in trials:
+        rounds = trial.loc[trial["round"] > 0]
+        skip_rates.append(100 * rounds["skipped"].mean())
+        values = np.sort(rounds.loc[rounds["updated"], "exit_index_sum"])
+        if values.size:
+            counts = np.searchsorted(values, thresholds, side="right")
+            cdfs.append(100 * counts / values.size)
 
-        # tt: 通信時間 [s]
-        if method == "A":
-            tt = 0.0 if position is not None else np.nan
-
-        else:
-            tt = (
-                size_bits[int(candidate) - 1] / (b * eta[position])
-                if (position is not None and np.isfinite(b) and b > 0 and eta[position] > 0) else np.nan
-            )
-
-        conditions.append({
-            "seed": seed,
-            "round": t,
-            "client": i,
-            "selected": bool(updated) and position is not None,
-            "updated": bool(updated),
-            "distance_m": float(distances[i]),
-            "cpu_hz": float(cpu_hz[i]),
-            "noise_w": float(noises[t - 1]),
-            "channel_real": float(
-                channels[t - 1, i].real
-            ),
-            "channel_imag": float(
-                channels[t - 1, i].imag
-            ),
-            "candidate_exit": (
-                exits[candidate - 1]
-                if candidate is not None
-                else np.nan
-            ),
-            "bandwidth_hz": b,
-            "computation_s": tc,
-            "transmission_s": tt,
-            "total_s": tc + tt,
-            "uplink_mse": uplink_mses.get(i, np.nan)
-        })
-
-
-def save_round_metrics(output, history, conditions):
-    """中断時にも、それまでのラウンド結果を残す。"""
-    pd.DataFrame(history).to_csv(output / "round_metrics.csv", index=False)
-    pd.DataFrame(conditions).to_csv(output / "client_conditions.csv", index=False)
-
-
-def save_checkpoint(output, config, args, seed, model_name, exits,
-                    subsets, test_dataset, global_model, last_accuracies):
-    rounds = config["FL"]["global_rounds"]
-    num_clients = config["FL"]["num_clients"]
-    batch_size = config["training"]["batch_size"]
-
-    # 最終ラウンドのみ保存する。
-    # 最終ラウンドがスキップされた場合は、維持された重みを保存する。
-    torch.save({
-        "format_version": 2,
-        "model_name": model_name,
-        "dataset_name": "CIFAR10",
-        "num_classes": 10,
-        "num_clients": num_clients,
-        "batch_size": batch_size,
-        "method": args.method,
+    pd.DataFrame({
+        "exit_index_sum": thresholds,
+        "cdf_pct": np.mean(cdfs, axis=0) if cdfs else np.nan,
+    }).to_csv(output / "exit_sum_cdf.csv", index=False)
+    pd.DataFrame([{
+        "skip_rate_pct": np.mean(skip_rates),
+        "iterations": len(trials),
+        "iterations_with_updates": len(cdfs),
         "alpha": args.alpha,
-        "seed": seed,
-        "round": rounds,
         "gamma": args.gamma,
-        "config": config,
-        "exit_ids": list(exits),
-        "global_state": full_state(global_model),
-        "exit_accuracies": dict(last_accuracies),
-        "train_indices": [torch.tensor(original_indices(subset), dtype=torch.int64) for subset in subsets],
-        "test_indices": torch.arange(len(test_dataset), dtype=torch.int64),
-    }, output / f"seed_{seed}_round_{rounds:03d}.pt")
+        "cohort": cohort,
+        "exit_ids": ",".join(map(str, exits)),
+    }]).to_csv(output / "skip_rate.csv", index=False)
 
