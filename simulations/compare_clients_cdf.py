@@ -10,7 +10,7 @@ TOTAL = 40
 CLIENT_COUNTS = [1, 5, 10, 20, 40]
 
 fig, ax = plt.subplots(figsize=(6.4, 4.2))
-right = 4 * max(CLIENT_COUNTS) + 1
+right = 5 * max(CLIENT_COUNTS) + 1
 
 for k in CLIENT_COUNTS:
     folder = RESULTS / f"{ALPHA}_{k}|{TOTAL}_gamma={GAMMA:g}" / "B"

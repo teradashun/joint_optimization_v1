@@ -68,9 +68,7 @@ def main(argv=None):
     min_dis = communication["min_dis"]
     power = 10.0 ** ((communication["power_dbm"] - 30.0) / 10.0)
 
-    cpu_hz = np.asarray([
-        (1e9, 2e9, 3e9, 4e9, 5e9)[i % 5] for i in range(num_clients)
-    ])
+    cpu_hz = np.asarray([(1e9, 1e9, 1e9, 1e9, 1e9)[i % 5] for i in range(num_clients)])
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     train_loader, _, test_loader = get_datasets(batch_size, "CIFAR10", val_ratio=0.0)
@@ -160,10 +158,11 @@ def main(argv=None):
         last_accuracies = evaluate_global(global_model, test_loader, device, exits)
 
         initial_exit = {
-            "C": exits[-1],
-            "D": exits[2],
-            "E": exits[1],
-            "F": exits[0],
+            "C": 34,
+            "D": 15,
+            "E": 10,
+            "F": 5,
+            "G": 1
         }.get(args.method, exits[-1])
 
         history = [{

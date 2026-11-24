@@ -497,40 +497,33 @@ class EENet34Branch1525(ResNet):
 
 
 class EENet34Branch51015(ResNet):
-    exit_ids = (5, 10, 15, 34)
+    exit_ids = (1, 5, 10, 15, 34)
 
     exit_state_prefixes = {
+        1: ("conv1.", "bn1.", "exit1."),
         5: (
             "conv1.", "bn1.",
             "layer1.0.",
             "layer1.1.conv1.", "layer1.1.bn1.",
-            "exit5.",
+            "exit1.", "exit5.",
         ),
         10: (
             "conv1.", "bn1.", "layer1.", "layer2.0.",
-            "exit5.", "exit10.",
+            "exit1.", "exit5.", "exit10.",
         ),
         15: (
             "conv1.", "bn1.", "layer1.",
             "layer2.0.", "layer2.1.", "layer2.2.",
             "layer2.3.conv1.", "layer2.3.bn1.",
-            "exit5.", "exit10.", "exit15.",
+            "exit1.", "exit5.", "exit10.", "exit15.",
         ),
         34: ("",),
     }
 
-    def __init__(
-        self,
-        num_classes=10,
-        channels=(16, 32, 64, 128),
-    ):
-        super().__init__(
-            BasicBlock,
-            [3, 4, 6, 3],
-            num_classes=num_classes,
-            channels=channels,
-        )
+    def __init__(self, num_classes=10, channels=(16, 32, 64, 128)):
+        super().__init__(BasicBlock, [3, 4, 6, 3], num_classes=num_classes, channels=channels)
 
+        self.exit1 = nn.Linear(channels[0], num_classes)
         self.exit5 = nn.Linear(channels[0], num_classes)
         self.exit10 = nn.Linear(channels[1], num_classes)
         self.exit15 = nn.Linear(channels[1], num_classes)
@@ -562,6 +555,9 @@ class EENet34Branch51015(ResNet):
 
         # Exit5：主経路のConv 4層＋分類器1層
         x = self.relu(self.bn1(self.conv1(x)))
+
+        if collect(1, x, self.exit1):
+            return tuple(outputs)
         x = self.layer1[0](x)
 
         identity = x
@@ -704,13 +700,9 @@ MODEL_SPECS = {
     },
     "eenet34_51015_quarter": {
         "factory": eenet34_51015_quarter,
-        "exit_ids": (5, 10, 15, 34),
-        "loss_weights": (0.1, 0.2, 0.3, 0.4),
-        "shared_prefixes": (
-            "conv1.", "bn1.",
-            "layer1.0.",
-            "layer1.1.conv1.", "layer1.1.bn1.",
-        ),
+        "exit_ids": EENet34Branch51015.exit_ids,
+        "loss_weights": tuple(i / 15 for i in range(1, 6)),
+        "shared_prefixes": ("conv1.", "bn1."),
         "profile_file": "inference_profile_resnet34_51015_quarter.json",
     },
 }

@@ -10,11 +10,11 @@ training:
   temperature: 3
 
 FL:
-  global_rounds: 3
+  global_rounds: 50
   num_clients: 40
-  dirichlet: 0.5   # [0.1, 1e20]
-  ite_num: 3
-  cohort: 1
+  dirichlet: 1000000000   # [0.1, 1e20]
+  ite_num: 5
+  cohort: 20
 
 communication:
   total_bandwidth: 5000000  # 5 MHz

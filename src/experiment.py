@@ -28,8 +28,8 @@ def shared_state(model, prefixes):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--alpha", type=float, choices=(0.5, 1e10), required=True)
-    parser.add_argument("--method", choices=("A", "B", "C", "D", "E", "F"), required=True)
+    parser.add_argument("--alpha", type=float, choices=(0.3, 0.5, 1e10), required=True)
+    parser.add_argument("--method", choices=("A", "B", "C", "D", "E", "F", "G"), required=True)
     parser.add_argument("--gamma", type=float, required=True)
     parser.add_argument("--seed", type=int, default=100)
     parser.add_argument("--output-root", type=Path, default=Path("results"))

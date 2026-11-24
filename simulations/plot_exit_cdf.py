@@ -15,8 +15,7 @@ for path in sorted(root.glob("[A-F]/exit_sum_cdf.csv")):
     label = f"{method} (no updates)" if df.empty else method
     ax.step(df["exit_index_sum"], df["cdf_pct"], where="post", label=label)
 
-ax.set(xlabel="Sum of selected Exit indices", ylabel="Empirical CDF (%)",
-       ylim=(0, 102))
+ax.set(xlabel="Sum of selected Exit indices", ylabel="Empirical CDF (%)", ylim=(0, 102))
 ax.legend(title="Method")
 ax.grid(alpha=0.3)
 fig.tight_layout()

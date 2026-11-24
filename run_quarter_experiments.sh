@@ -8,8 +8,8 @@ read -rp "gamma [秒]: " GAMMA
 SEED=100
 RUN_ROOT="results"
 
-for alpha in 0.5; do
-    for method in A B C D E F; do
+for alpha in 0.3; do
+    for method in A B C D E F G; do
         echo "alpha=$alpha method=$method seed=$SEED"
 
         python3 -u -m src.FL \

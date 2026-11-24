@@ -88,16 +88,7 @@ def make_environment(num_clients, rounds, total_bandwidth, seed,
     return distances, gains, noises
 
 
-def plan_round(
-    method,
-    comp,
-    gains,
-    noise,
-    power,
-    size_bits,
-    total_bandwidth,
-    gamma,
-):
+def plan_round(method, comp, gains, noise, power, size_bits, total_bandwidth, gamma):
     """
     戻り値：
       choices: Exit番号1・2・3。Dが実行不能ならNone。
@@ -105,13 +96,13 @@ def plan_round(
       updated: このラウンドで更新を実行するか。
       eta: 周波数利用効率 [bit/s/Hz]。
     """
-    if method not in ("A", "B", "C", "D", "E", "F"):
+    if method not in ("A", "B", "C", "D", "E", "F", "G"):
         raise ValueError("未対応の手法です")
     
     comp = np.asarray(comp, dtype=float)
     n, exits = comp.shape
 
-    if (exits not in (3, 4) or not np.isfinite(comp).all() or (comp < 0).any()):
+    if (exits not in (3, 4, 5) or not np.isfinite(comp).all() or (comp < 0).any()):
         raise ValueError("計算遅延の値が不正です")
 
     if (np.diff(comp, axis=1) < 0).any():
@@ -172,9 +163,10 @@ def plan_round(
     else:
         fixed_choices = {
             "C": exits,
-            "D": 3,
-            "E": 2,
-            "F": 1,
+            "D": 4,
+            "E": 3,
+            "F": 2,
+            "G": 1
         }
         choices = np.full(n, fixed_choices[method], dtype=int)
 
