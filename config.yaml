@@ -10,10 +10,10 @@ training:
   temperature: 3
 
 FL:
-  global_rounds: 50
+  global_rounds: 100
   num_clients: 40
-  dirichlet: 1000000000   # [0.1, 1e20]
-  ite_num: 5
+  dirichlet: 0.3   # [0.1, 1e20]
+  ite_num: 15
   cohort: 20
 
 communication:
